@@ -7,7 +7,44 @@ Hooks.on('ready', async () => {
       // Get actor from origin.actor (UUID)
       const actorId = origin.actor?.replace('Actor.', '');
       const actor = game.actors.get(actorId);
-      showSummonWindow({name: 'Summon Spell'}, actor);
+      // Try to get the spell item from the UUID
+      let spellItem = null;
+      if (origin?.uuid) {
+        spellItem = await fromUuid(origin.uuid);
+      }
+      let range = null;
+      if (spellItem && spellItem.system?.range?.value) {
+        range = spellItem.system.range.value;
+      }
+      // Draw a measurement circle template on the caster's token with the spell's range
+      if (range && actor) {
+        // Try to extract a number from the range string (e.g., "30 feet" -> 30)
+        let distance = null;
+        if (typeof range === 'number') {
+          distance = range;
+        } else if (typeof range === 'string') {
+          const match = range.match(/(\d+)/);
+          if (match) distance = parseInt(match[1], 10);
+        }
+        if (Number.isFinite(distance)) {
+          // Find the caster's token on the canvas
+          const casterToken = canvas.tokens.placeables.find(t => t.actor?.id === actor.id);
+          if (casterToken) {
+            // Create a circle template
+            const templateData = {
+              t: "circle",
+              user: game.user.id,
+              x: casterToken.center.x,
+              y: casterToken.center.y,
+              distance: distance,
+              direction: 0,
+              fillColor: game.user.color
+            };
+            await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+          }
+        }
+      }
+      showSummonWindow({name: 'Summon Spell', range}, actor);
     }
   });
 });
