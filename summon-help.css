@@ -1,0 +1,17 @@
+/* Summon Helper basic styles */
+#summon-select {
+  width: 100%;
+  padding: 4px;
+  margin-bottom: 8px;
+}
+#summon-btn {
+  background: #4caf50;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+#summon-btn:hover {
+  background: #388e3c;
+}

@@ -1,0 +1,16 @@
+{
+  "name": "summon-helper",
+  "title": "Summon Helper",
+  "description": "A module to help with summoning creatures in Pathfinder 2e (Foundry VTT v12)",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "minimumCoreVersion": "12",
+  "compatibleCoreVersion": "12",
+  "scripts": ["summon-help.js"],
+  "styles": ["summon-help.css"],
+  "esmodules": [],
+  "packs": [],
+  "manifest": "module.json",
+  "url": "",
+  "license": "MIT"
+}
