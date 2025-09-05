@@ -78,15 +78,17 @@ async function showSummonWindow(item, actor) {
             <div class="summon-level-option" data-level="">All</div>
             ${levelOptions}
           </div>
-          <button type="button" id="reset-level-btn" style="width:100%;margin-top:6px;background:#4caf50;color:white;font-weight:bold;border:none;border-radius:4px;padding:2px 0;">Reset Level</button>
         </div>
         <div style="flex:1;">
           <div style="font-weight:bold; margin-bottom: 2px;">Traits:</div>
           <div id='trait-filters' style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; max-height: 242px; overflow-y: auto; overflow-x: hidden;">
             ${traitCheckboxes}
           </div>
-          <button type="button" id="reset-traits-btn" style="width:100%;margin-top:6px;background:#4caf50;color:white;font-weight:bold;border:none;border-radius:4px;padding:2px 0;">Reset Traits</button>
         </div>
+      </div>
+      <div style="display:flex;gap:12px;margin-top:6px;">
+        <button type="button" id="reset-level-btn" style="flex:1;background:#4caf50;color:white;font-weight:bold;border:none;border-radius:4px;padding:2px 0;">Reset Level</button>
+        <button type="button" id="reset-traits-btn" style="flex:1;background:#4caf50;color:white;font-weight:bold;border:none;border-radius:4px;padding:2px 0;">Reset Traits</button>
       </div>
     </div>
     <br>
