@@ -46,13 +46,13 @@ async function showSummonWindow(item, actor) {
   // Gather levels and build dropdowns
 
 
-  // Prepare actors with level and traits info, sort by level ascending
+  // Prepare actors with level and traits info, sort by level descending
   let actorsWithLevel = actors.map(a => {
     let level = a.system?.details?.level?.value ?? a.system?.level ?? '';
     let traits = a.system?.traits?.value || [];
     return { id: a.id, name: a.name, level: Number(level) || 0, traits };
   });
-  actorsWithLevel.sort((a, b) => a.level - b.level);
+  actorsWithLevel.sort((a, b) => b.level - a.level);
 
   let actorLevels = actorsWithLevel.map(a => a.level).filter(lvl => lvl !== '').map(Number);
   let uniqueLevels = [...new Set(actorLevels)].sort((a, b) => a - b);
@@ -74,24 +74,26 @@ async function showSummonWindow(item, actor) {
       <div style="display: flex; align-items: flex-start; gap: 24px;">
         <div style="min-width: 60px;">
           <label style="font-weight:bold;">Level:</label><br>
-          <div id='level-list' style="display: flex; flex-direction: column; gap: 2px; margin-top: 2px;">
+          <div id='level-list' style="display: flex; flex-direction: column; gap: 2px; margin-top: 2px; max-height: 242px; overflow-y: auto;">
             <div class="summon-level-option" data-level="">All</div>
             ${levelOptions}
           </div>
+          <button type="button" id="reset-level-btn" style="width:100%;margin-top:6px;background:#4caf50;color:white;font-weight:bold;border:none;border-radius:4px;padding:2px 0;">Reset Level</button>
         </div>
         <div style="flex:1;">
           <div style="font-weight:bold; margin-bottom: 2px;">Traits:</div>
-          <div id='trait-filters' style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px;">
+          <div id='trait-filters' style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 8px; max-height: 242px; overflow-y: auto; overflow-x: hidden;">
             ${traitCheckboxes}
           </div>
+          <button type="button" id="reset-traits-btn" style="width:100%;margin-top:6px;background:#4caf50;color:white;font-weight:bold;border:none;border-radius:4px;padding:2px 0;">Reset Traits</button>
         </div>
       </div>
     </div>
     <br>
-    <div style="display:flex;align-items:center;margin-bottom:2px;gap:12px;">
+    <div style="display:flex;align-items:center;margin-bottom:2px;gap:40px;">
       <label style="margin:0;">Choose a creature:</label>
-      <label style="display:flex;align-items:center;gap:4px;font-weight:normal;font-size:13px;">
-        <input type="checkbox" id="place-template-checkbox"> Place template?
+      <label style="display:flex;align-items:center;gap:4px;font-weight:normal;font-size:13px;margin-left:auto;">
+        Place template for 10s?<input type="checkbox" id="place-template-checkbox"> 
       </label>
     </div>
     <div id='summon-list' style='max-height: 176px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 0; flex:1 1 auto;'>
@@ -141,6 +143,11 @@ async function showSummonWindow(item, actor) {
         `;
         document.head.appendChild(style);
       }
+      // Ensure the dialog auto-sizes to content and doesn't overflow
+      const $dialog = html.closest('.app.window-app');
+      if ($dialog.length) {
+        $dialog.css({ width: 'auto', 'max-width': '600px', 'min-width': '340px' });
+      }
       // Store all creature options for reliable re-filtering
       const allCreatureOptions = html.find('.summon-creature-option').map(function() {
         return $(this).clone();
@@ -151,22 +158,20 @@ async function showSummonWindow(item, actor) {
       function filterCreatures() {
         // Reset scroll to top
         html.find('#summon-list').scrollTop(0);
-        // Get highest selected level from .summon-level-option.selected
+        // Get selected levels from .summon-level-option.selected
         const selectedLevelDivs = html.find('.summon-level-option.selected');
-        let maxLevel = null;
-        selectedLevelDivs.each(function() {
+        let selectedLevels = selectedLevelDivs.map(function() {
           const lvl = $(this).data('level');
-          if (lvl !== "" && lvl !== undefined) {
-            if (maxLevel === null || Number(lvl) > maxLevel) maxLevel = Number(lvl);
-          }
-        });
-        selectedLevel = maxLevel;
+          return lvl === '' ? null : Number(lvl);
+        }).get().filter(lvl => lvl !== null);
+        // If All is selected or none, show all
+        const filterByLevel = selectedLevels.length > 0;
         const selectedTraits = html.find('.trait-filter:checked').map(function() { return this.value; }).get();
         let filtered = allCreatureOptions.filter(function(opt) {
           const creatureLevel = Number($(opt).data('level'));
           const creatureTraits = ($(opt).data('traits') || '').split(',').filter(Boolean);
           // Level filter
-          if (selectedLevel !== null && creatureLevel > selectedLevel) return false;
+          if (filterByLevel && !selectedLevels.includes(creatureLevel)) return false;
           // Trait filter: must have all selected traits
           if (selectedTraits.length && !selectedTraits.every(trait => creatureTraits.includes(trait))) return false;
           return true;
@@ -190,20 +195,19 @@ async function showSummonWindow(item, actor) {
 
       // Level list selection logic
       html.on('click', '.summon-level-option', function() {
-        // Mark this and all lower levels as selected
-        const clickedLevel = $(this).data('level');
-        html.find('.summon-level-option').removeClass('selected');
-        if (clickedLevel === "" || clickedLevel === undefined) {
-          // All
-          html.find('.summon-level-option[data-level=""]').addClass('selected');
+        const $this = $(this);
+        const isAll = $this.data('level') === '';
+        if (isAll) {
+          html.find('.summon-level-option').removeClass('selected');
+          $this.addClass('selected');
         } else {
-          html.find('.summon-level-option').each(function() {
-            const lvl = $(this).data('level');
-            if (lvl === "" || lvl === undefined) return;
-            if (Number(lvl) <= Number(clickedLevel)) {
-              $(this).addClass('selected');
-            }
-          });
+          const $all = html.find('.summon-level-option[data-level=""]');
+          $all.removeClass('selected');
+          $this.toggleClass('selected');
+          // If none selected, select All
+          if (html.find('.summon-level-option.selected').length === 0) {
+            $all.addClass('selected');
+          }
         }
         filterCreatures();
       });
@@ -220,6 +224,17 @@ async function showSummonWindow(item, actor) {
 
       // Initial selection
       html.find('.summon-creature-option').first().addClass('selected');
+
+      // Add Reset Level and Reset Traits button logic
+      html.find('#reset-level-btn').on('click', function() {
+        html.find('.summon-level-option').removeClass('selected');
+        html.find('.summon-level-option[data-level=""]').addClass('selected');
+        filterCreatures();
+      });
+      html.find('#reset-traits-btn').on('click', function() {
+        html.find('.trait-filter').prop('checked', false);
+        filterCreatures();
+      });
 
       html.find('#summon-btn').click(async () => {
         console.log('[Summon Helper] Summon button clicked');
