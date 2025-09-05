@@ -44,14 +44,7 @@ Hooks.on('ready', async () => {
           }
         }
       }
-      // Try to extract summonable trait(s) from the spell
-      let summonTraits = [];
-      if (spellItem && spellItem.system?.traits?.value) {
-        // Exclude generic spell traits
-        const genericTraits = ["attack","cantrip","concentrate","conjuration","consecration","curse","darkness","death","disease","divination","downtime","dream","earth","electricity","emotion","enchantment","exploration","fear","fire","fortune","healing","incapacitation","incorporeal","light","linguistic","manipulate","mental","metamagic","misfortune","morph","move","nonlethal","plant","poison","polymorph","prediction","rare","scrying","shadow","sleep","scrying","summon","teleportation","tradition","transmutation","uncommon","water","magical","arcane","divine","occult","primal","common","uncommon","rare","unique","ritual","spell" ];
-        summonTraits = spellItem.system.traits.value.filter(t => !genericTraits.includes(t));
-      }
-      showSummonWindow({name: 'Summon Spell', range, summonTraits}, actor);
+      showSummonWindow({name: 'Summon Spell', range}, actor);
     }
   });
 });
@@ -79,10 +72,11 @@ async function showSummonWindow(item, actor) {
   }
   // Gather levels and build dropdowns
 
-  // Prepare actors with level and trait info, sort by level ascending
+
+  // Prepare actors with level and traits info, sort by level ascending
   let actorsWithLevel = actors.map(a => {
     let level = a.system?.details?.level?.value ?? a.system?.level ?? '';
-    let traits = a.system?.traits?.value ?? [];
+    let traits = a.system?.traits?.value || [];
     return { id: a.id, name: a.name, level: Number(level) || 0, traits };
   });
   actorsWithLevel.sort((a, b) => a.level - b.level);
@@ -91,29 +85,36 @@ async function showSummonWindow(item, actor) {
   let uniqueLevels = [...new Set(actorLevels)].sort((a, b) => a - b);
   let levelOptions = uniqueLevels.map(lvl => `<option value='${lvl}'>${lvl}</option>`).join('');
 
-  // If summonTraits are provided, filter actorsWithLevel to only those with a matching trait
-  let summonTraits = item.summonTraits || [];
-  let filteredActors = actorsWithLevel;
-  if (summonTraits.length > 0) {
-    filteredActors = actorsWithLevel.filter(a => a.traits.some(t => summonTraits.includes(t)));
-  }
+  // Gather all unique traits for all creatures (for initial render)
+  let allTraits = Array.from(new Set(actorsWithLevel.flatMap(a => a.traits))).sort();
+  let traitCheckboxes = allTraits.map(trait => `
+    <label style="margin-right:8px;"><input type="checkbox" class="trait-filter" value="${trait}"> ${trait}</label>
+  `).join('');
 
-  // By default, show all (filtered) creatures sorted by level
-  let creatureOptions = filteredActors.map(a => {
-    return `<option value='${a.id}' data-level='${a.level}'>${a.level ? `LVL${a.level} ` : ''}${a.name}</option>`;
+  // By default, show all creatures sorted by level
+  let creatureOptions = actorsWithLevel.map(a => {
+    return `<div class="summon-creature-option" data-id="${a.id}" data-level="${a.level}" data-traits="${a.traits.join(',')}">${a.level ? `LVL${a.level} ` : ''}${a.name}</div>`;
   }).join('');
 
   let html = `<form>
-    ${summonTraits.length > 0 ? `<div><b>Summonable trait:</b> ${summonTraits.join(', ')}</div><br>` : ''}
-    <label for='level-select'>Filter by level:</label>
-    <select id='level-select'>
-      <option value=''>All</option>
-      ${levelOptions}
-    </select>
-    <br><br>
-    <label for='summon-select'>Choose a creature:</label>
-    <select id='summon-select'>${creatureOptions}</select>
-    <br><br>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <div>
+        <label for='level-select'>Filter by level:</label>
+        <select id='level-select'>
+          <option value=''>All</option>
+          ${levelOptions}
+        </select>
+      </div>
+      <div id='trait-filters'>
+        ${traitCheckboxes}
+      </div>
+    </div>
+    <br>
+    <label>Choose a creature:</label>
+    <div id='summon-list' style='max-height: 240px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 4px;'>
+      ${creatureOptions}
+    </div>
+    <br>
     <button type='button' id='summon-btn'>Summon this!</button>
   </form>`;
   let d = new Dialog({
@@ -121,32 +122,52 @@ async function showSummonWindow(item, actor) {
     content: html,
     buttons: {},
     render: html => {
-      // Level filter logic
       // Store all creature options for reliable re-filtering
-      const allCreatureOptions = html.find('#summon-select option').map(function() {
+      const allCreatureOptions = html.find('.summon-creature-option').map(function() {
         return $(this).clone();
       }).get();
 
-      html.find('#level-select').on('change', function() {
-        const selectedLevel = Number($(this).val());
-        // Filter and sort from the original full list every time
+      // Filtering function
+      function filterCreatures() {
+        const selectedLevel = Number(html.find('#level-select').val());
+        const selectedTraits = html.find('.trait-filter:checked').map(function() { return this.value; }).get();
         let filtered = allCreatureOptions.filter(function(opt) {
           const creatureLevel = Number($(opt).data('level'));
-          return !selectedLevel || creatureLevel <= selectedLevel;
+          const creatureTraits = ($(opt).data('traits') || '').split(',').filter(Boolean);
+          // Level filter
+          if (selectedLevel && creatureLevel > selectedLevel) return false;
+          // Trait filter: must have all selected traits
+          if (selectedTraits.length && !selectedTraits.every(trait => creatureTraits.includes(trait))) return false;
+          return true;
         });
         filtered = filtered.sort(function(a, b) {
           return Number($(a).data('level')) - Number($(b).data('level'));
         });
-        html.find('#summon-select').empty().append(filtered);
+        html.find('#summon-list').empty().append(filtered);
         // Select the first visible creature
-        const firstVisible = html.find('#summon-select option').first();
+        html.find('.summon-creature-option').removeClass('selected');
+        const firstVisible = html.find('.summon-creature-option').first();
         if (firstVisible.length) {
-          html.find('#summon-select').val(firstVisible.val());
+          firstVisible.addClass('selected');
         }
+      }
+
+      html.find('#level-select').on('change', filterCreatures);
+      html.find('.trait-filter').on('change', filterCreatures);
+
+      // Selection logic for the list
+      html.on('click', '.summon-creature-option', function() {
+        html.find('.summon-creature-option').removeClass('selected');
+        $(this).addClass('selected');
       });
 
+      // Initial selection
+      html.find('.summon-creature-option').first().addClass('selected');
+
       html.find('#summon-btn').click(async () => {
-        const summonActorId = html.find('#summon-select').val();
+        const selectedDiv = html.find('.summon-creature-option.selected');
+        if (!selectedDiv.length) return ui.notifications.warn('No creature selected!');
+        const summonActorId = selectedDiv.data('id');
         const summonActor = game.actors.get(summonActorId);
         if (!summonActor) return ui.notifications.warn('Actor not found!');
         // Place token adjacent to caster's token if available
@@ -171,6 +192,13 @@ async function showSummonWindow(item, actor) {
         await canvas.scene.createEmbeddedDocuments("Token", [tokenData]);
         d.close();
       });
+      // Add some basic styling for selected creature
+      const style = `<style>
+        .summon-creature-option { cursor: pointer; padding: 2px 6px; border-radius: 3px; }
+        .summon-creature-option.selected { background: #4caf50; color: white; }
+        .summon-creature-option:hover { background: #e0e0e0; }
+      </style>`;
+      html.closest('.app').append(style);
     }
   });
   d.render(true);
