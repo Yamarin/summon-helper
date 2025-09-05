@@ -69,7 +69,7 @@ async function showSummonWindow(item, actor) {
     return `<div class="summon-creature-option" data-id="${a.id}" data-level="${a.level}" data-traits="${a.traits.join(',')}">LVL${a.level} ${a.name}</div>`;
   }).join('');
 
-  let html = `<form style='display:flex;flex-direction:column;'>
+  let html = `<form class='summon-helper-form' style='display:flex;flex-direction:column;'>
     <div style="padding: 8px 0 0 0;">
       <div style="display: flex; align-items: flex-start; gap: 24px;">
         <div style="min-width: 60px;">
@@ -104,6 +104,7 @@ async function showSummonWindow(item, actor) {
     content: html,
     buttons: {},
     render: html => {
+      console.log('[Summon Helper] Summon Creature window opened', {actor, item});
       // Make creature list scroll smoothly and by 1 item per wheel event
       const $summonList = html.find('#summon-list');
   $summonList.css('scroll-behavior', 'auto');
@@ -133,7 +134,7 @@ async function showSummonWindow(item, actor) {
           .summon-level-option.selected { background: #1976d2; color: white; font-weight: bold; }
           .summon-level-option:hover { background: #e0e0e0; }
           #summon-btn { box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-          form { height: 100%; min-height: 320px; }
+          .summon-helper-form { height: 100%; min-height: 320px; }
           #trait-filters label { display: flex; align-items: center; gap: 4px; font-size: 13px; padding: 2px 0; }
           #trait-filters { margin-bottom: 2px; }
           #summon-list { max-height: 176px !important; padding: 0 !important; }
@@ -221,6 +222,7 @@ async function showSummonWindow(item, actor) {
       html.find('.summon-creature-option').first().addClass('selected');
 
       html.find('#summon-btn').click(async () => {
+        console.log('[Summon Helper] Summon button clicked');
         const selectedDiv = html.find('.summon-creature-option.selected');
         if (!selectedDiv.length) return ui.notifications.warn('No creature selected!');
         const summonActorId = selectedDiv.data('id');
@@ -228,6 +230,7 @@ async function showSummonWindow(item, actor) {
         if (!summonActor) return ui.notifications.warn('Actor not found!');
         // Place template if requested
         const placeTemplate = html.find('#place-template-checkbox').is(':checked');
+        console.log('[Summon Helper] Place template?', placeTemplate);
         if (placeTemplate && item.range && actor) {
           let distance = null;
           if (typeof item.range === 'number') {
@@ -249,7 +252,13 @@ async function showSummonWindow(item, actor) {
                 direction: 0,
                 fillColor: game.user.color
               };
-              await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+              const created = await canvas.scene.createEmbeddedDocuments("MeasuredTemplate", [templateData]);
+              if (created && created.length > 0) {
+                const templateId = created[0].id;
+                setTimeout(() => {
+                  canvas.scene.deleteEmbeddedDocuments("MeasuredTemplate", [templateId]);
+                }, 10000);
+              }
             }
           }
         }
@@ -275,13 +284,7 @@ async function showSummonWindow(item, actor) {
         await canvas.scene.createEmbeddedDocuments("Token", [tokenData]);
         d.close();
       });
-      // Add some basic styling for selected creature
-      const style = `<style>
-        .summon-creature-option { cursor: pointer; padding: 2px 6px; border-radius: 3px; }
-        .summon-creature-option.selected { background: #4caf50; color: white; }
-        .summon-creature-option:hover { background: #e0e0e0; }
-      </style>`;
-      html.closest('.app').append(style);
+  // (Removed duplicate style injection that could affect chat window size)
     }
   });
   d.render(true);
