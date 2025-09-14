@@ -3,44 +3,119 @@ Hooks.on('ready', async () => {
   // Listen for spell casting with summon trait
   Hooks.on('createChatMessage', async (message, options, userId) => {
     const origin = message.flags?.pf2e?.origin;
+    
     if (origin?.type === 'spell' && origin?.rollOptions?.includes('origin:item:trait:summon')) {
       // Get actor from origin.actor (UUID)
       const actorId = origin.actor?.replace('Actor.', '');
       const actor = game.actors.get(actorId);
+      
+      // Fallback: If actor not found by ID, try multiple methods
+      let fallbackActor = actor;
+      if (!actor) {
+        // Method 1: Try controlled tokens
+        const controlledTokens = canvas.tokens.controlled;
+        if (controlledTokens.length > 0) {
+          fallbackActor = controlledTokens[0].actor;
+        }
+        
+        // Method 2: Try message speaker
+        if (!fallbackActor && message.speaker?.actor) {
+          fallbackActor = game.actors.get(message.speaker.actor);
+        }
+        
+        // Method 3: Try message speaker token
+        if (!fallbackActor && message.speaker?.token) {
+          const token = canvas.tokens.get(message.speaker.token);
+          if (token) {
+            fallbackActor = token.actor;
+          }
+        }
+      }
+      
       // Try to get the spell item from the UUID
       let spellItem = null;
       if (origin?.uuid) {
         spellItem = await fromUuid(origin.uuid);
       }
+      
       let range = null;
       if (spellItem && spellItem.system?.range?.value) {
         range = spellItem.system.range.value;
       }
-  // (Template placement is now handled only after clicking Summon this!)
-    showSummonWindow({name: 'Summon Spell', range}, actor);
+      
+      // (Template placement is now handled only after clicking Summon this!)
+      if (!fallbackActor) {
+        console.error('[Summon Helper] No actor found through any method!');
+        ui.notifications.error('Could not determine which character is casting the spell. Please try again.');
+        return;
+      }
+      
+      showSummonWindow({name: 'Summon Spell', range}, fallbackActor);
     }
   });
 });
 
 async function showSummonWindow(item, actor) {
-  // Search for any folder named '<character_name> Summons' anywhere, regardless of parent
+  // Search for summon folder with multiple fallback strategies
   let folder = null;
   if (actor && actor.name) {
     const allFolders = game.folders.contents;
-    const subfolderName = `${actor.name} Summons`;
-    folder = allFolders.find(f => f.name === subfolderName);
+    
+    // Strategy 1: Look for exact match with actor name
+    const exactName = `${actor.name} Summons`;
+    folder = allFolders.find(f => f.name === exactName);
+    
+    // Strategy 2: Look for partial match (in case of name variations)
     if (!folder) {
-      ui.notifications.info(`No folder found named: ${subfolderName}`);
+      const partialMatch = allFolders.find(f => 
+        f.name.includes(actor.name) && f.name.toLowerCase().includes('summons')
+      );
+      if (partialMatch) {
+        folder = partialMatch;
+      }
+    }
+    
+    // Strategy 2.5: For NPCs, also look for folders with "NPC" or "Monster" in the name
+    if (!folder && actor.type === 'npc') {
+      const npcMatch = allFolders.find(f => 
+        (f.name.toLowerCase().includes('npc') || f.name.toLowerCase().includes('monster')) && 
+        f.name.toLowerCase().includes('summons')
+      );
+      if (npcMatch) {
+        folder = npcMatch;
+      }
+    }
+    
+    // Strategy 3: Look for any folder containing "Summons" (fallback)
+    if (!folder) {
+      const summonsFolder = allFolders.find(f => 
+        f.name.toLowerCase().includes('summons') && f.contents.some(c => c.documentName === 'Actor')
+      );
+      if (summonsFolder) {
+        folder = summonsFolder;
+      }
+    }
+    
+    // Show available summons folders to help user
+    if (!folder) {
+      const summonsFolders = allFolders.filter(f => f.name.toLowerCase().includes('summons'));
+      if (summonsFolders.length > 0) {
+        const folderNames = summonsFolders.map(f => f.name).join(', ');
+        ui.notifications.info(`No summons folder found for: ${actor.name}. Available summons folders: ${folderNames}`);
+      } else {
+        ui.notifications.info(`No summons folder found for: ${actor.name}. No summons folders exist in the Actors tab.`);
+      }
     }
   }
+  
   if (!folder) {
-    ui.notifications.warn(`Summons folder for this character not found! (Summons/<character_name> Summons)`);
+    ui.notifications.warn(`Summons folder for this character not found! Please create a folder named "${actor?.name || 'Character'} Summons" in the Actors tab.`);
     return;
   }
   // Get all actors in the folder
   const actors = folder.contents.filter(a => a.documentName === 'Actor');
   if (!actors.length) {
-    ui.notifications.warn('No creatures found in this character\'s Summons folder!');
+    ui.notifications.warn(`No creatures found in the summons folder "${folder.name}"! Please add some creatures to this folder.`);
     return;
   }
   // Gather levels and build dropdowns
@@ -108,7 +183,6 @@ async function showSummonWindow(item, actor) {
     content: html,
     buttons: {},
     render: html => {
-      console.log('[Summon Helper] Summon Creature window opened', {actor, item});
       // Make creature list scroll smoothly and by 1 item per wheel event
       const $summonList = html.find('#summon-list');
   $summonList.css('scroll-behavior', 'auto');
@@ -239,7 +313,6 @@ async function showSummonWindow(item, actor) {
       });
 
       html.find('#summon-btn').click(async () => {
-        console.log('[Summon Helper] Summon button clicked');
         const selectedDiv = html.find('.summon-creature-option.selected');
         if (!selectedDiv.length) return ui.notifications.warn('No creature selected!');
         const summonActorId = selectedDiv.data('id');
@@ -247,7 +320,6 @@ async function showSummonWindow(item, actor) {
         if (!summonActor) return ui.notifications.warn('Actor not found!');
         // Place template if requested
         const placeTemplate = html.find('#place-template-checkbox').is(':checked');
-        console.log('[Summon Helper] Place template?', placeTemplate);
         if (placeTemplate && item.range && actor) {
           let distance = null;
           if (typeof item.range === 'number') {

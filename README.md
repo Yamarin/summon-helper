@@ -26,10 +26,12 @@ This module streamlines the process of summoning creatures in Foundry VTT for Pa
 ## How to Use
 
 1. **Setup Summons Folder:**
-   - For each character, create a folder named `<Character Name> Summons` in the Actors tab.
+   - For each character (PC or NPC), create a folder named `<Character Name> Summons` in the Actors tab.
+   - For NPCs, you can also use folders like `NPC Summons` or `Monster Summons` as alternatives.
    - Add all summonable creatures (as Actor entries) to this folder.
 2. **Cast a Summon Spell:**
    - When you cast a spell with the summon trait, the Summon Helper window will appear.
+   - The module works for both Player Characters and NPCs.
 3. **Select Creature and Options:**
    - Use the level and trait filters to find your desired creature.
    - (Optional) Check "Place template for 10s?" to show a range template.
@@ -39,7 +41,13 @@ This module streamlines the process of summoning creatures in Foundry VTT for Pa
 
 ## Notes
 - The module only works for Pathfinder 2e and Foundry VTT v12+.
-- If no Summons folder is found for your character, you will be notified.
+- **NPC Support**: The module now works for both Player Characters and NPCs with improved folder detection.
+- **Smart Folder Detection**: The module will try multiple strategies to find your summons folder:
+  - Exact match: `<Character Name> Summons`
+  - Partial match: Any folder containing the character name and "summons"
+  - NPC-specific: Folders like "NPC Summons" or "Monster Summons" for NPCs
+  - Fallback: Any folder containing "summons" with creatures
+- If no Summons folder is found, you'll see helpful error messages listing available folders.
 - The module does not add or manage summonable creatures; you must add them to the correct folder yourself.
 
 ## Support
