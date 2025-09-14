@@ -50,12 +50,12 @@ Hooks.on('ready', async () => {
         return;
       }
       
-      showSummonWindow({name: 'Summon Spell', range}, fallbackActor);
+      showSummonWindow({name: 'Summon Spell', range}, fallbackActor, message);
     }
   });
 });
 
-async function showSummonWindow(item, actor) {
+async function showSummonWindow(item, actor, message = null) {
   // Search for summon folder with multiple fallback strategies
   let folder = null;
   if (actor && actor.name) {
@@ -330,7 +330,21 @@ async function showSummonWindow(item, actor) {
           }
           if (Number.isFinite(distance)) {
             // Find the caster's token on the canvas
-            const casterToken = canvas.tokens.placeables.find(t => t.actor?.id === actor.id);
+            const casterTokens = canvas.tokens.placeables.filter(t => t.actor?.id === actor.id);
+            let casterToken = null;
+            if (casterTokens.length === 1) {
+              casterToken = casterTokens[0];
+            } else if (casterTokens.length > 1) {
+              // Multiple tokens with same actor - try to find the specific one that cast the spell
+              if (message?.speaker?.token) {
+                casterToken = casterTokens.find(t => t.id === message.speaker.token);
+              }
+              // Fallback to controlled token if specific token not found
+              if (!casterToken) {
+                casterToken = casterTokens.find(t => t.controlled) || casterTokens[0];
+              }
+            }
+            
             if (casterToken) {
               const templateData = {
                 t: "circle",
@@ -353,7 +367,30 @@ async function showSummonWindow(item, actor) {
         }
         // Place token adjacent to caster's token if available
         let pos;
-        const casterToken = canvas.tokens.controlled[0];
+        // Find the token that corresponds to the actual caster actor
+        const casterTokens = canvas.tokens.placeables.filter(t => t.actor?.id === actor.id);
+        console.log(`[Summon Helper] Found ${casterTokens.length} tokens for actor ${actor.name} (${actor.id})`);
+        
+        let casterToken = null;
+        if (casterTokens.length === 1) {
+          casterToken = casterTokens[0];
+        } else if (casterTokens.length > 1) {
+          // Multiple tokens with same actor - try to find the specific one that cast the spell
+          if (message?.speaker?.token) {
+            // Try to find the specific token from the message speaker
+            casterToken = casterTokens.find(t => t.id === message.speaker.token);
+            console.log(`[Summon Helper] Looking for specific token ID: ${message.speaker.token}`);
+          }
+          
+          // Fallback to controlled token if specific token not found
+          if (!casterToken) {
+            casterToken = casterTokens.find(t => t.controlled) || casterTokens[0];
+            console.log(`[Summon Helper] Using fallback token: ${casterToken?.name} (controlled: ${casterToken?.controlled})`);
+          } else {
+            console.log(`[Summon Helper] Found specific token: ${casterToken?.name} (ID: ${casterToken?.id})`);
+          }
+        }
+        
         if (casterToken) {
           // Place to the right (east) of caster
           const gridSize = canvas.scene.grid.size;
